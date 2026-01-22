@@ -145,7 +145,8 @@ html {
 }
 
 .advanced-row weave-input {
-  width: 180px;
+  width: 120px;
+  text-align: right;
 }
 
 /* Summary */
