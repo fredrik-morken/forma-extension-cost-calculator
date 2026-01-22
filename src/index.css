@@ -83,9 +83,21 @@ html {
   padding-left: 18px;
 }
 
+.cost-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .cost-input {
   font-size: 12px;
   width: 120px;
+}
+
+.unit-suffix {
+  font: var(--12-regular);
+  opacity: 0.8;
+  white-space: nowrap;
 }
 
 /* Divider */

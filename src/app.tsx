@@ -31,10 +31,12 @@ function CostPerSqmInput({
   value,
   onChange,
   imperialUnits,
+  currencySymbol,
 }: {
   value: number;
   onChange: (value: number) => void;
   imperialUnits: boolean;
+  currencySymbol: string;
 }) {
   function onInput(event: Event) {
     const { value: inputValue } = event.target as HTMLInputElement;
@@ -52,14 +54,17 @@ function CostPerSqmInput({
     : value;
 
   return (
-    /* @ts-ignore */
-    <weave-input
-      class="cost-input"
-      onInput={onInput}
-      type="number"
-      value={displayValue || 0}
-      unit={imperialUnits ? "/ft²" : "/m²"}
-    />
+    <div class="cost-input-wrapper">
+      {/* @ts-ignore */}
+      <weave-input
+        class="cost-input"
+        onInput={onInput}
+        type="number"
+        value={displayValue || 0}
+        unit={currencySymbol || undefined}
+      />
+      <span class="unit-suffix">{imperialUnits ? "/ft²" : "/m²"}</span>
+    </div>
   );
 }
 
@@ -222,6 +227,7 @@ function RightPanel() {
                 value={costPerSqmPerFunction[metric.functionId] || 0}
                 onChange={setCostForFunction(metric.functionId)}
                 imperialUnits={imperialUnits}
+                currencySymbol={currencySymbol}
               />
             </div>
           </div>
