@@ -101,6 +101,7 @@ function RightPanel() {
   const [currencySymbol, setCurrencySymbol] = useState<string>("");
   const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<"cost" | "revenue">("cost");
+  const [functionsOpen, setFunctionsOpen] = useState<boolean>(true);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -261,10 +262,15 @@ function RightPanel() {
 
       {activeTab === "cost" && (
         <>
-          <p class="section-header">Cost per function</p>
+          <div
+            class="section-header section-header-collapsible"
+            onClick={() => setFunctionsOpen(!functionsOpen)}
+          >
+            <span>{functionsOpen ? "▼" : "▶"} Cost per function</span>
+          </div>
 
           {/* Cost inputs per function */}
-          {gfaPerFunction.map((metric) => {
+          {functionsOpen && gfaPerFunction.map((metric) => {
             const area =
               metric.value === "UNABLE_TO_CALCULATE"
                 ? 0
@@ -302,10 +308,15 @@ function RightPanel() {
 
       {activeTab === "revenue" && (
         <>
-          <p class="section-header">Revenue per function</p>
+          <div
+            class="section-header section-header-collapsible"
+            onClick={() => setFunctionsOpen(!functionsOpen)}
+          >
+            <span>{functionsOpen ? "▼" : "▶"} Revenue per function</span>
+          </div>
 
           {/* Revenue inputs per function */}
-          {gfaPerFunction.map((metric) => {
+          {functionsOpen && gfaPerFunction.map((metric) => {
             const area =
               metric.value === "UNABLE_TO_CALCULATE"
                 ? 0
