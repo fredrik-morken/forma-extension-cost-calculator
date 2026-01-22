@@ -12,6 +12,8 @@ interface CostSettings {
   softCostPercent: number;
   contingencyPercent: number;
   currencySymbol: string;
+  landCost: number;
+  earthworkCost: number;
 }
 
 const getLocalStorage = (): Partial<CostSettings> => {
@@ -99,6 +101,8 @@ function RightPanel() {
   const [softCostPercent, setSoftCostPercent] = useState<number>(20);
   const [contingencyPercent, setContingencyPercent] = useState<number>(10);
   const [currencySymbol, setCurrencySymbol] = useState<string>("");
+  const [landCost, setLandCost] = useState<number>(0);
+  const [earthworkCost, setEarthworkCost] = useState<number>(0);
   const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<"cost" | "revenue">("cost");
   const [functionsOpen, setFunctionsOpen] = useState<boolean>(true);
@@ -112,6 +116,10 @@ function RightPanel() {
       setContingencyPercent(stored.contingencyPercent);
     if (stored.currencySymbol !== undefined)
       setCurrencySymbol(stored.currencySymbol);
+    if (stored.landCost !== undefined)
+      setLandCost(stored.landCost);
+    if (stored.earthworkCost !== undefined)
+      setEarthworkCost(stored.earthworkCost);
     if (stored.costPerSqmPerFunction)
       setCostPerSqmPerFunction(stored.costPerSqmPerFunction);
     if (stored.revenuePerSqmPerFunction)
@@ -168,6 +176,8 @@ function RightPanel() {
       softCostPercent,
       contingencyPercent,
       currencySymbol,
+      landCost,
+      earthworkCost,
     });
   }, [
     costPerSqmPerFunction,
@@ -175,6 +185,8 @@ function RightPanel() {
     softCostPercent,
     contingencyPercent,
     currencySymbol,
+    landCost,
+    earthworkCost,
   ]);
 
   function setCostForFunction(functionId: string): (cost: number) => void {
@@ -210,8 +222,9 @@ function RightPanel() {
   }, [gfaPerFunction, costPerSqmPerFunction]);
 
   const hardCostSubtotal = useMemo(() => {
-    return Object.values(costPerFunction).reduce((acc, curr) => acc + curr, 0);
-  }, [costPerFunction]);
+    const functionCosts = Object.values(costPerFunction).reduce((acc, curr) => acc + curr, 0);
+    return functionCosts + landCost + earthworkCost;
+  }, [costPerFunction, landCost, earthworkCost]);
 
   const softCosts = hardCostSubtotal * (softCostPercent / 100);
   const contingency = hardCostSubtotal * (contingencyPercent / 100);
@@ -327,6 +340,30 @@ function RightPanel() {
                 setCurrencySymbol((e.target as HTMLInputElement).value)
               }
               placeholder="Optional (e.g., $, €, £)"
+            />
+          </div>
+
+          <div class="advanced-row">
+            <label id="land-cost-label">Land cost:</label>
+            <weave-input
+              type="number"
+              value={landCost}
+              onInput={(e: Event) =>
+                setLandCost(Number((e.target as HTMLInputElement).value))
+              }
+              unit={currencySymbol || undefined}
+            />
+          </div>
+
+          <div class="advanced-row">
+            <label id="earthwork-label">Earthwork:</label>
+            <weave-input
+              type="number"
+              value={earthworkCost}
+              onInput={(e: Event) =>
+                setEarthworkCost(Number((e.target as HTMLInputElement).value))
+              }
+              unit={currencySymbol || undefined}
             />
           </div>
 
