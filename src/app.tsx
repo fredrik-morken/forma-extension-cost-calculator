@@ -8,6 +8,7 @@ const LOCAL_STORAGE_KEY = "cost-calculator-extension";
 
 interface CostSettings {
   costPerSqmPerFunction: Record<string, number>;
+  revenuePerSqmPerFunction: Record<string, number>;
   softCostPercent: number;
   contingencyPercent: number;
   currencySymbol: string;
@@ -91,10 +92,15 @@ function RightPanel() {
     Record<string, number>
   >({});
 
+  const [revenuePerSqmPerFunction, setRevenuePerSqmPerFunction] = useState<
+    Record<string, number>
+  >({});
+
   const [softCostPercent, setSoftCostPercent] = useState<number>(20);
   const [contingencyPercent, setContingencyPercent] = useState<number>(10);
   const [currencySymbol, setCurrencySymbol] = useState<string>("");
   const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<"cost" | "revenue">("cost");
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -107,6 +113,8 @@ function RightPanel() {
       setCurrencySymbol(stored.currencySymbol);
     if (stored.costPerSqmPerFunction)
       setCostPerSqmPerFunction(stored.costPerSqmPerFunction);
+    if (stored.revenuePerSqmPerFunction)
+      setRevenuePerSqmPerFunction(stored.revenuePerSqmPerFunction);
   }, []);
 
   // Poll area metrics from Forma
@@ -123,7 +131,7 @@ function RightPanel() {
           );
         setGfaPerFunction(functionBreakdownMetrics);
 
-        // Initialize costs for new functions
+        // Initialize costs and revenue for new functions
         setCostPerSqmPerFunction((prev) => {
           const newCosts = { ...prev };
           functionBreakdownMetrics.forEach((metric) => {
@@ -132,6 +140,16 @@ function RightPanel() {
             }
           });
           return newCosts;
+        });
+
+        setRevenuePerSqmPerFunction((prev) => {
+          const newRevenue = { ...prev };
+          functionBreakdownMetrics.forEach((metric) => {
+            if (!(metric.functionId in newRevenue)) {
+              newRevenue[metric.functionId] = 0;
+            }
+          });
+          return newRevenue;
         });
       });
     }, 500);
@@ -145,12 +163,14 @@ function RightPanel() {
   useEffect(() => {
     setLocalStorage({
       costPerSqmPerFunction,
+      revenuePerSqmPerFunction,
       softCostPercent,
       contingencyPercent,
       currencySymbol,
     });
   }, [
     costPerSqmPerFunction,
+    revenuePerSqmPerFunction,
     softCostPercent,
     contingencyPercent,
     currencySymbol,
@@ -161,6 +181,15 @@ function RightPanel() {
       setCostPerSqmPerFunction((prev) => ({
         ...prev,
         [functionId]: cost,
+      }));
+    };
+  }
+
+  function setRevenueForFunction(functionId: string): (revenue: number) => void {
+    return function (revenue: number) {
+      setRevenuePerSqmPerFunction((prev) => ({
+        ...prev,
+        [functionId]: revenue,
       }));
     };
   }
@@ -187,52 +216,130 @@ function RightPanel() {
   const contingency = hardCostSubtotal * (contingencyPercent / 100);
   const totalDevelopmentCost = hardCostSubtotal + softCosts + contingency;
 
+  // Calculate revenue
+  const revenuePerFunction: Record<string, number> = useMemo(() => {
+    const revenue: Record<string, number> = {};
+    gfaPerFunction.forEach((metric) => {
+      if (metric.value === "UNABLE_TO_CALCULATE") {
+        revenue[metric.functionId] = 0;
+      } else {
+        const revenuePerSqm = revenuePerSqmPerFunction[metric.functionId] || 0;
+        revenue[metric.functionId] = metric.value * revenuePerSqm;
+      }
+    });
+    return revenue;
+  }, [gfaPerFunction, revenuePerSqmPerFunction]);
+
+  const totalRevenue = useMemo(() => {
+    return Object.values(revenuePerFunction).reduce((acc, curr) => acc + curr, 0);
+  }, [revenuePerFunction]);
+
+  const roiPercent = useMemo(() => {
+    if (totalDevelopmentCost === 0) return 0;
+    return ((totalRevenue - totalDevelopmentCost) / totalDevelopmentCost) * 100;
+  }, [totalRevenue, totalDevelopmentCost]);
+
   return (
     <div class="wrapper">
       <p class="header">Cost Calculator</p>
 
       {/* Tab Bar */}
       <div class="tab-bar">
-        <div class="tab tab-active">Sqm</div>
-        <div class="tab tab-disabled" title="Coming soon">
-          Units
+        <div
+          class={`tab ${activeTab === "cost" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("cost")}
+        >
+          Cost
+        </div>
+        <div
+          class={`tab ${activeTab === "revenue" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("revenue")}
+        >
+          Revenue
         </div>
       </div>
 
-      <p class="section-header">Cost per function</p>
+      {activeTab === "cost" && (
+        <>
+          <p class="section-header">Cost per function</p>
 
-      {/* Cost inputs per function */}
-      {gfaPerFunction.map((metric) => {
-        const area =
-          metric.value === "UNABLE_TO_CALCULATE"
-            ? 0
-            : imperialUnits
-              ? metric.value * METER_TO_FEET * METER_TO_FEET
-              : metric.value;
+          {/* Cost inputs per function */}
+          {gfaPerFunction.map((metric) => {
+            const area =
+              metric.value === "UNABLE_TO_CALCULATE"
+                ? 0
+                : imperialUnits
+                  ? metric.value * METER_TO_FEET * METER_TO_FEET
+                  : metric.value;
 
-        return (
-          <div class="function-block" key={metric.functionId}>
-            <div class="function-info">
-              <div
-                class="function-color"
-                style={`background: ${metric.functionColor}`}
-              ></div>
-              <div class="function-name">{metric.functionName}</div>
-              <div class="function-area">
-                {formatNumber(area, "")} {imperialUnits ? "ft²" : "m²"}
+            return (
+              <div class="function-block" key={metric.functionId}>
+                <div class="function-info">
+                  <div
+                    class="function-color"
+                    style={`background: ${metric.functionColor}`}
+                  ></div>
+                  <div class="function-name">
+                    {metric.functionName}{" "}
+                    <span class="function-area">
+                      ({formatNumber(area, "")} {imperialUnits ? "ft²" : "m²"})
+                    </span>
+                  </div>
+                </div>
+                <div class="function-input">
+                  <CostPerSqmInput
+                    value={costPerSqmPerFunction[metric.functionId] || 0}
+                    onChange={setCostForFunction(metric.functionId)}
+                    imperialUnits={imperialUnits}
+                    currencySymbol={currencySymbol}
+                  />
+                </div>
               </div>
-            </div>
-            <div class="function-input">
-              <CostPerSqmInput
-                value={costPerSqmPerFunction[metric.functionId] || 0}
-                onChange={setCostForFunction(metric.functionId)}
-                imperialUnits={imperialUnits}
-                currencySymbol={currencySymbol}
-              />
-            </div>
-          </div>
-        );
-      })}
+            );
+          })}
+        </>
+      )}
+
+      {activeTab === "revenue" && (
+        <>
+          <p class="section-header">Revenue per function</p>
+
+          {/* Revenue inputs per function */}
+          {gfaPerFunction.map((metric) => {
+            const area =
+              metric.value === "UNABLE_TO_CALCULATE"
+                ? 0
+                : imperialUnits
+                  ? metric.value * METER_TO_FEET * METER_TO_FEET
+                  : metric.value;
+
+            return (
+              <div class="function-block" key={metric.functionId}>
+                <div class="function-info">
+                  <div
+                    class="function-color"
+                    style={`background: ${metric.functionColor}`}
+                  ></div>
+                  <div class="function-name">
+                    {metric.functionName}{" "}
+                    <span class="function-area">
+                      ({formatNumber(area, "")} {imperialUnits ? "ft²" : "m²"})
+                    </span>
+                  </div>
+                </div>
+                <div class="function-input">
+                  <CostPerSqmInput
+                    value={revenuePerSqmPerFunction[metric.functionId] || 0}
+                    onChange={setRevenueForFunction(metric.functionId)}
+                    imperialUnits={imperialUnits}
+                    currencySymbol={currencySymbol}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
 
       <hr class="divider" />
 
@@ -294,31 +401,63 @@ function RightPanel() {
       {/* Summary */}
       <p class="section-header">Summary</p>
 
-      <div class="summary-row">
-        <span>Hard cost</span>
-        <span>{formatNumber(hardCostSubtotal, currencySymbol)}</span>
-      </div>
+      {activeTab === "cost" && (
+        <>
+          <div class="summary-row">
+            <span>Hard cost</span>
+            <span>{formatNumber(hardCostSubtotal, currencySymbol)}</span>
+          </div>
 
-      {softCostPercent > 0 && (
-        <div class="summary-row">
-          <span>Soft costs ({softCostPercent}%)</span>
-          <span>{formatNumber(softCosts, currencySymbol)}</span>
-        </div>
+          {softCostPercent > 0 && (
+            <div class="summary-row">
+              <span>Soft costs ({softCostPercent}%)</span>
+              <span>{formatNumber(softCosts, currencySymbol)}</span>
+            </div>
+          )}
+
+          {contingencyPercent > 0 && (
+            <div class="summary-row">
+              <span>Contingency ({contingencyPercent}%)</span>
+              <span>{formatNumber(contingency, currencySymbol)}</span>
+            </div>
+          )}
+
+          <hr class="divider" />
+
+          <div class="summary-row summary-total">
+            <span>Total Development Cost</span>
+            <span>{formatNumber(totalDevelopmentCost, currencySymbol)}</span>
+          </div>
+        </>
       )}
 
-      {contingencyPercent > 0 && (
-        <div class="summary-row">
-          <span>Contingency ({contingencyPercent}%)</span>
-          <span>{formatNumber(contingency, currencySymbol)}</span>
-        </div>
+      {activeTab === "revenue" && (
+        <>
+          <div class="summary-row summary-total">
+            <span>Total Revenue</span>
+            <span>{formatNumber(totalRevenue, currencySymbol)}</span>
+          </div>
+
+          <hr class="divider" />
+
+          <div class="summary-row">
+            <span>Total Development Cost</span>
+            <span>{formatNumber(totalDevelopmentCost, currencySymbol)}</span>
+          </div>
+
+          <div class="summary-row">
+            <span>Net Profit</span>
+            <span>{formatNumber(totalRevenue - totalDevelopmentCost, currencySymbol)}</span>
+          </div>
+
+          <hr class="divider" />
+
+          <div class="summary-row summary-total">
+            <span>ROI</span>
+            <span>{roiPercent.toFixed(1)}%</span>
+          </div>
+        </>
       )}
-
-      <hr class="divider" />
-
-      <div class="summary-row summary-total">
-        <span>Total Development Cost</span>
-        <span>{formatNumber(totalDevelopmentCost, currencySymbol)}</span>
-      </div>
     </div>
   );
 }

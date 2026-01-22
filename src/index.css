@@ -69,13 +69,12 @@ html {
 }
 
 .function-name {
-  flex: 1;
   font: var(--12-regular);
 }
 
 .function-area {
   font: var(--12-regular);
-  opacity: 0.8;
+  opacity: 0.6;
   white-space: nowrap;
 }
 
