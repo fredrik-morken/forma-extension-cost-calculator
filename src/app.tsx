@@ -260,97 +260,50 @@ function RightPanel() {
         </div>
       </div>
 
-      {activeTab === "cost" && (
-        <>
-          <div
-            class="section-header section-header-collapsible"
-            onClick={() => setFunctionsOpen(!functionsOpen)}
-          >
-            <span>{functionsOpen ? "▼" : "▶"} Cost per function</span>
-          </div>
+      <div
+        class="section-header section-header-collapsible"
+        onClick={() => setFunctionsOpen(!functionsOpen)}
+      >
+        <span>{functionsOpen ? "▼" : "▶"} {activeTab === "cost" ? "Cost" : "Revenue"} per function</span>
+      </div>
 
-          {/* Cost inputs per function */}
-          {functionsOpen && gfaPerFunction.map((metric) => {
-            const area =
-              metric.value === "UNABLE_TO_CALCULATE"
-                ? 0
-                : imperialUnits
-                  ? metric.value * METER_TO_FEET * METER_TO_FEET
-                  : metric.value;
+      {functionsOpen && gfaPerFunction.map((metric) => {
+        const area =
+          metric.value === "UNABLE_TO_CALCULATE"
+            ? 0
+            : imperialUnits
+              ? metric.value * METER_TO_FEET * METER_TO_FEET
+              : metric.value;
 
-            return (
-              <div class="function-block" key={metric.functionId}>
-                <div class="function-info">
-                  <div
-                    class="function-color"
-                    style={`background: ${metric.functionColor}`}
-                  ></div>
-                  <div class="function-name">
-                    {metric.functionName}{" "}
-                    <span class="function-area">
-                      ({formatNumber(area, "")} {imperialUnits ? "ft²" : "m²"})
-                    </span>
-                  </div>
-                </div>
-                <div class="function-input">
-                  <CostPerSqmInput
-                    value={costPerSqmPerFunction[metric.functionId] || 0}
-                    onChange={setCostForFunction(metric.functionId)}
-                    imperialUnits={imperialUnits}
-                    currencySymbol={currencySymbol}
-                  />
-                </div>
+        return (
+          <div class="function-block" key={metric.functionId}>
+            <div class="function-info">
+              <div
+                class="function-color"
+                style={`background: ${metric.functionColor}`}
+              ></div>
+              <div class="function-name">
+                {metric.functionName}{" "}
+                <span class="function-area">
+                  ({formatNumber(area, "")} {imperialUnits ? "ft²" : "m²"})
+                </span>
               </div>
-            );
-          })}
-        </>
-      )}
-
-      {activeTab === "revenue" && (
-        <>
-          <div
-            class="section-header section-header-collapsible"
-            onClick={() => setFunctionsOpen(!functionsOpen)}
-          >
-            <span>{functionsOpen ? "▼" : "▶"} Revenue per function</span>
+            </div>
+            <div class="function-input">
+              <CostPerSqmInput
+                value={activeTab === "cost"
+                  ? (costPerSqmPerFunction[metric.functionId] || 0)
+                  : (revenuePerSqmPerFunction[metric.functionId] || 0)}
+                onChange={activeTab === "cost"
+                  ? setCostForFunction(metric.functionId)
+                  : setRevenueForFunction(metric.functionId)}
+                imperialUnits={imperialUnits}
+                currencySymbol={currencySymbol}
+              />
+            </div>
           </div>
-
-          {/* Revenue inputs per function */}
-          {functionsOpen && gfaPerFunction.map((metric) => {
-            const area =
-              metric.value === "UNABLE_TO_CALCULATE"
-                ? 0
-                : imperialUnits
-                  ? metric.value * METER_TO_FEET * METER_TO_FEET
-                  : metric.value;
-
-            return (
-              <div class="function-block" key={metric.functionId}>
-                <div class="function-info">
-                  <div
-                    class="function-color"
-                    style={`background: ${metric.functionColor}`}
-                  ></div>
-                  <div class="function-name">
-                    {metric.functionName}{" "}
-                    <span class="function-area">
-                      ({formatNumber(area, "")} {imperialUnits ? "ft²" : "m²"})
-                    </span>
-                  </div>
-                </div>
-                <div class="function-input">
-                  <CostPerSqmInput
-                    value={revenuePerSqmPerFunction[metric.functionId] || 0}
-                    onChange={setRevenueForFunction(metric.functionId)}
-                    imperialUnits={imperialUnits}
-                    currencySymbol={currencySymbol}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </>
-      )}
+        );
+      })}
 
       <hr class="divider" />
 
@@ -409,66 +362,49 @@ function RightPanel() {
 
       <hr class="divider" />
 
-      {/* Summary */}
+      {/* Summary - Always visible, consolidated */}
       <p class="section-header">Summary</p>
 
-      {activeTab === "cost" && (
-        <>
-          <div class="summary-row">
-            <span>Hard cost</span>
-            <span>{formatNumber(hardCostSubtotal, currencySymbol)}</span>
-          </div>
+      <div class="summary-row">
+        <span>Hard cost</span>
+        <span>{formatNumber(hardCostSubtotal, currencySymbol)}</span>
+      </div>
 
-          {softCostPercent > 0 && (
-            <div class="summary-row">
-              <span>Soft costs ({softCostPercent}%)</span>
-              <span>{formatNumber(softCosts, currencySymbol)}</span>
-            </div>
-          )}
-
-          {contingencyPercent > 0 && (
-            <div class="summary-row">
-              <span>Contingency ({contingencyPercent}%)</span>
-              <span>{formatNumber(contingency, currencySymbol)}</span>
-            </div>
-          )}
-
-          <hr class="divider" />
-
-          <div class="summary-row summary-total">
-            <span>Total Development Cost</span>
-            <span>{formatNumber(totalDevelopmentCost, currencySymbol)}</span>
-          </div>
-        </>
+      {softCostPercent > 0 && (
+        <div class="summary-row">
+          <span>Soft costs ({softCostPercent}%)</span>
+          <span>{formatNumber(softCosts, currencySymbol)}</span>
+        </div>
       )}
 
-      {activeTab === "revenue" && (
-        <>
-          <div class="summary-row summary-total">
-            <span>Total Revenue</span>
-            <span>{formatNumber(totalRevenue, currencySymbol)}</span>
-          </div>
-
-          <hr class="divider" />
-
-          <div class="summary-row">
-            <span>Total Development Cost</span>
-            <span>{formatNumber(totalDevelopmentCost, currencySymbol)}</span>
-          </div>
-
-          <div class="summary-row">
-            <span>Net Profit</span>
-            <span>{formatNumber(totalRevenue - totalDevelopmentCost, currencySymbol)}</span>
-          </div>
-
-          <hr class="divider" />
-
-          <div class="summary-row summary-total">
-            <span>ROI</span>
-            <span>{roiPercent.toFixed(1)}%</span>
-          </div>
-        </>
+      {contingencyPercent > 0 && (
+        <div class="summary-row">
+          <span>Contingency ({contingencyPercent}%)</span>
+          <span>{formatNumber(contingency, currencySymbol)}</span>
+        </div>
       )}
+
+      <div class="summary-row summary-total">
+        <span>Total Development Cost</span>
+        <span>{formatNumber(totalDevelopmentCost, currencySymbol)}</span>
+      </div>
+
+      <hr class="divider" />
+
+      <div class="summary-row">
+        <span>Total Revenue</span>
+        <span>{formatNumber(totalRevenue, currencySymbol)}</span>
+      </div>
+
+      <div class="summary-row">
+        <span>Net Profit</span>
+        <span>{formatNumber(totalRevenue - totalDevelopmentCost, currencySymbol)}</span>
+      </div>
+
+      <div class="summary-row summary-total">
+        <span>ROI</span>
+        <span>{roiPercent.toFixed(1)}%</span>
+      </div>
     </div>
   );
 }
