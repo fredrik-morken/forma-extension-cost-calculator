@@ -4,56 +4,61 @@ import { useEffect, useMemo, useState } from "react";
 
 export const METER_TO_FEET = 3.28084;
 
-const LOCAL_STORAGE_KEY = "parking-demand-extension";
-const getLocalStorage = (): Record<string, number> => {
-  const value = localStorage.getItem(LOCAL_STORAGE_KEY);
-  return value ? JSON.parse(value) : ({} as Record<string, number>);
-};
+const LOCAL_STORAGE_KEY = "cost-calculator-extension";
 
-const setLocalStorage = (value: Record<string, number>): void => {
-  return localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(value));
-};
-
-function round(value: number) {
-  return Math.round(value);
+interface CostSettings {
+  costPerSqmPerFunction: Record<string, number>;
+  softCostPercent: number;
+  contingencyPercent: number;
+  currencySymbol: string;
 }
 
-function SqmPerSpotPerFunction({
-  sqm,
-  setSqm,
+const getLocalStorage = (): Partial<CostSettings> => {
+  const value = localStorage.getItem(LOCAL_STORAGE_KEY);
+  return value ? JSON.parse(value) : {};
+};
+
+const setLocalStorage = (value: CostSettings): void => {
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(value));
+};
+
+function formatNumber(value: number, currencySymbol: string): string {
+  const formatted = Math.round(value).toLocaleString("en-US");
+  return currencySymbol ? `${currencySymbol} ${formatted}` : formatted;
+}
+
+function CostPerSqmInput({
+  value,
+  onChange,
+  imperialUnits,
 }: {
-  sqm: number;
-  setSqm: (demand: number) => void;
+  value: number;
+  onChange: (value: number) => void;
+  imperialUnits: boolean;
 }) {
-  const [imperialUnits, setImperialUnits] = useState<boolean>(false);
-  useEffect(() => {
-    Forma.getPresentationUnitSystem().then((value) =>
-      setImperialUnits(value === "imperial")
-    );
-  }, [setImperialUnits]);
   function onInput(event: Event) {
-    const { value } = event.target as HTMLInputElement;
-    if (isNaN(Number(value))) {
+    const { value: inputValue } = event.target as HTMLInputElement;
+    if (isNaN(Number(inputValue))) {
       return;
     }
     const convertedValue = imperialUnits
-      ? Number(value) / METER_TO_FEET / METER_TO_FEET
-      : Number(value);
-    setSqm(convertedValue);
+      ? Number(inputValue) / METER_TO_FEET / METER_TO_FEET
+      : Number(inputValue);
+    onChange(convertedValue);
   }
 
-  const value = imperialUnits
-    ? Math.round(sqm * METER_TO_FEET * METER_TO_FEET)
-    : sqm;
+  const displayValue = imperialUnits
+    ? Math.round(value * METER_TO_FEET * METER_TO_FEET)
+    : value;
 
   return (
     /* @ts-ignore */
     <weave-input
-      class="sqm-input"
+      class="cost-input"
       onInput={onInput}
       type="number"
-      value={value || 0}
-      unit={imperialUnits ? "ft²" : "m²"}
+      value={displayValue || 0}
+      unit={imperialUnits ? "/ft²" : "/m²"}
     />
   );
 }
@@ -75,32 +80,54 @@ function RightPanel() {
     FunctionBreakdownMetric[]
   >([]);
 
-  const [noOfSpots, setNoOfSpots] = useState<number>(0);
+  const [imperialUnits, setImperialUnits] = useState<boolean>(false);
 
-  const [sqmPerSpotPerFunction, setSqmPerSpotPerFunction] = useState<
+  const [costPerSqmPerFunction, setCostPerSqmPerFunction] = useState<
     Record<string, number>
   >({});
 
+  const [softCostPercent, setSoftCostPercent] = useState<number>(20);
+  const [contingencyPercent, setContingencyPercent] = useState<number>(10);
+  const [currencySymbol, setCurrencySymbol] = useState<string>("");
+  const [advancedOpen, setAdvancedOpen] = useState<boolean>(false);
+
+  // Load from localStorage on mount
   useEffect(() => {
+    const stored = getLocalStorage();
+    if (stored.softCostPercent !== undefined)
+      setSoftCostPercent(stored.softCostPercent);
+    if (stored.contingencyPercent !== undefined)
+      setContingencyPercent(stored.contingencyPercent);
+    if (stored.currencySymbol !== undefined)
+      setCurrencySymbol(stored.currencySymbol);
+    if (stored.costPerSqmPerFunction)
+      setCostPerSqmPerFunction(stored.costPerSqmPerFunction);
+  }, []);
+
+  // Poll area metrics from Forma
+  useEffect(() => {
+    Forma.getPresentationUnitSystem().then((value) =>
+      setImperialUnits(value === "imperial"),
+    );
+
     const intervalId = setInterval(() => {
       Forma.areaMetrics.calculate({}).then((metrics) => {
         const functionBreakdownMetrics =
           metrics.builtInMetrics.grossFloorArea.functionBreakdown.filter(
-            (func) => func.functionId != "unspecified"
+            (func) => func.functionId != "unspecified",
           );
         setGfaPerFunction(functionBreakdownMetrics);
-        const sqmPerSpotPerFunction = Object.fromEntries(
-          functionBreakdownMetrics.map((metric) => [metric.functionId, 50])
-        );
 
-        if (!localStorage.getItem(LOCAL_STORAGE_KEY)) {
-          setSqmPerSpotPerFunction(sqmPerSpotPerFunction);
-          setLocalStorage(sqmPerSpotPerFunction);
-        } else {
-          setSqmPerSpotPerFunction(getLocalStorage());
-        }
-        //@ts-ignore
-        setNoOfSpots(metrics.parkingStatistics!.spots);
+        // Initialize costs for new functions
+        setCostPerSqmPerFunction((prev) => {
+          const newCosts = { ...prev };
+          functionBreakdownMetrics.forEach((metric) => {
+            if (!(metric.functionId in newCosts)) {
+              newCosts[metric.functionId] = 0;
+            }
+          });
+          return newCosts;
+        });
       });
     }, 500);
 
@@ -109,112 +136,183 @@ function RightPanel() {
     };
   }, []);
 
-  const demandPerFunction: Record<string, number> = useMemo(() => {
-    const demandPerFunction: Record<string, number> = {};
-    gfaPerFunction.forEach((metric) => {
-      const sqmPerSpot = sqmPerSpotPerFunction[metric.functionId];
-      if (metric.value === "UNABLE_TO_CALCULATE") {
-        throw new Error(
-          `Metric value for ${metric.functionId} was "UNABLE_TO_CALCULATE"`
-        );
-      }
-      if (!sqmPerSpot) {
-        demandPerFunction[metric.functionId] = 0;
-      } else {
-        demandPerFunction[metric.functionId] = round(
-          metric.value / sqmPerSpotPerFunction[metric.functionId]
-        );
-      }
+  // Save to localStorage whenever settings change
+  useEffect(() => {
+    setLocalStorage({
+      costPerSqmPerFunction,
+      softCostPercent,
+      contingencyPercent,
+      currencySymbol,
     });
-    return demandPerFunction;
-  }, [sqmPerSpotPerFunction]);
+  }, [
+    costPerSqmPerFunction,
+    softCostPercent,
+    contingencyPercent,
+    currencySymbol,
+  ]);
 
-  function setSqmPerSpotForFunction(
-    functionId: string
-  ): (demand: number) => void {
-    return function (demand: number) {
-      setSqmPerSpotPerFunction((prev) => {
-        const newSqmPerSpot = { ...prev, [functionId]: demand };
-        setLocalStorage(newSqmPerSpot);
-        return { ...prev, [functionId]: demand };
-      });
+  function setCostForFunction(functionId: string): (cost: number) => void {
+    return function (cost: number) {
+      setCostPerSqmPerFunction((prev) => ({
+        ...prev,
+        [functionId]: cost,
+      }));
     };
   }
 
-  const totalDemand = useMemo(() => {
-    return Object.values(demandPerFunction).reduce(
-      (acc, curr) => acc + curr,
-      0
-    );
-  }, [demandPerFunction]);
+  // Calculate costs
+  const costPerFunction: Record<string, number> = useMemo(() => {
+    const costs: Record<string, number> = {};
+    gfaPerFunction.forEach((metric) => {
+      if (metric.value === "UNABLE_TO_CALCULATE") {
+        costs[metric.functionId] = 0;
+      } else {
+        const costPerSqm = costPerSqmPerFunction[metric.functionId] || 0;
+        costs[metric.functionId] = metric.value * costPerSqm;
+      }
+    });
+    return costs;
+  }, [gfaPerFunction, costPerSqmPerFunction]);
 
-  const difference = useMemo(() => {
-    return noOfSpots - totalDemand;
-  }, [totalDemand, noOfSpots]);
+  const hardCostSubtotal = useMemo(() => {
+    return Object.values(costPerFunction).reduce((acc, curr) => acc + curr, 0);
+  }, [costPerFunction]);
+
+  const softCosts = hardCostSubtotal * (softCostPercent / 100);
+  const contingency = hardCostSubtotal * (contingencyPercent / 100);
+  const totalDevelopmentCost = hardCostSubtotal + softCosts + contingency;
+
   return (
     <div class="wrapper">
-      <p class="header">lol demand</p>
+      <p class="header">Cost Calculator</p>
+
+      {/* Tab Bar */}
+      <div class="tab-bar">
+        <div class="tab tab-active">Sqm</div>
+        <div class="tab tab-disabled" title="Coming soon">
+          Units
+        </div>
+      </div>
+
+      <p class="section-header">Cost per function</p>
+
+      {/* Cost inputs per function */}
       {gfaPerFunction.map((metric) => {
+        const area =
+          metric.value === "UNABLE_TO_CALCULATE"
+            ? 0
+            : imperialUnits
+              ? metric.value * METER_TO_FEET * METER_TO_FEET
+              : metric.value;
+
         return (
-          <div class="setting-row">
-            <div
-              class="setting-row-function-color"
-              style={`background: ${metric.functionColor}`}
-            ></div>
-            <div class="setting-row-function-name">{metric.functionName}</div>
-            <div>1 p. /</div>
-            <SqmPerSpotPerFunction
-              setSqm={setSqmPerSpotForFunction(metric.functionId)}
-              sqm={sqmPerSpotPerFunction[metric.functionId]}
-            />
+          <div class="function-block" key={metric.functionId}>
+            <div class="function-info">
+              <div
+                class="function-color"
+                style={`background: ${metric.functionColor}`}
+              ></div>
+              <div class="function-name">{metric.functionName}</div>
+              <div class="function-area">
+                {formatNumber(area, "")} {imperialUnits ? "ft²" : "m²"}
+              </div>
+            </div>
+            <div class="function-input">
+              <CostPerSqmInput
+                value={costPerSqmPerFunction[metric.functionId] || 0}
+                onChange={setCostForFunction(metric.functionId)}
+                imperialUnits={imperialUnits}
+              />
+            </div>
           </div>
         );
       })}
+
       <hr class="divider" />
+
+      {/* Advanced Settings */}
       <div
-        class="stats-row"
-        style={{ display: "flex", alignItems: "center", fontSize: "11px" }}
+        class="advanced-header"
+        onClick={() => setAdvancedOpen(!advancedOpen)}
       >
-        <span>Parking spots</span>{" "}
-        <div style={{ width: "65px" }}>
-          <div
-            style={{
-              paddingLeft: "3px",
-              height: "6px",
-              width: "100%",
-              backgroundColor: "#f5f5f5",
-            }}
-          >
-            <div
-              style={{
-                height: "6px",
-                width: `${Math.min((noOfSpots / totalDemand) * 100, 100)}%`,
-                backgroundColor: "#0696D7",
-              }}
+        <span>{advancedOpen ? "▼" : "▶"} Advanced settings</span>
+      </div>
+
+      {advancedOpen && (
+        <div class="advanced-content">
+          <div class="advanced-row">
+            <label>Currency symbol:</label>
+            {/* @ts-ignore */}
+            <weave-input
+              type="text"
+              value={currencySymbol}
+              onInput={(e: Event) =>
+                setCurrencySymbol((e.target as HTMLInputElement).value)
+              }
+              placeholder="Optional (e.g., $, €, £)"
+            />
+          </div>
+
+          <div class="advanced-row">
+            <label>Soft costs:</label>
+            {/* @ts-ignore */}
+            <weave-input
+              type="number"
+              value={softCostPercent}
+              onInput={(e: Event) =>
+                setSoftCostPercent(Number((e.target as HTMLInputElement).value))
+              }
+              unit="%"
+            />
+          </div>
+
+          <div class="advanced-row">
+            <label>Contingency:</label>
+            {/* @ts-ignore */}
+            <weave-input
+              type="number"
+              value={contingencyPercent}
+              onInput={(e: Event) =>
+                setContingencyPercent(
+                  Number((e.target as HTMLInputElement).value),
+                )
+              }
+              unit="%"
             />
           </div>
         </div>
-        <span>
-          {noOfSpots} / {round(totalDemand)}
-        </span>
+      )}
+
+      <hr class="divider" />
+
+      {/* Summary */}
+      <p class="section-header">Summary</p>
+
+      <div class="summary-row">
+        <span>Hard cost</span>
+        <span>{formatNumber(hardCostSubtotal, currencySymbol)}</span>
       </div>
-      <p className="stats-row" style={{ fontSize: "11px" }}>
-        {difference > 0 && <span>Excess parking spots </span>}
-        {difference < 0 && <span>Missing parking spots </span>}
-        {difference != 0 && <span>{Math.abs(difference)}</span>}
-      </p>
-      {/*
-      <button
-        onClick={() => {
-          return Forma.openFloatingPanel({
-            embeddedViewId: "5e00e471-63ed-44a1-8406-cf2ab73408b9",
-            url: "https://spacemakerai.github.io/parking-demand-extension/?floating=1",
-          });
-        }}
-      >
-        Open settings
-      </button>
-      */}
+
+      {softCostPercent > 0 && (
+        <div class="summary-row">
+          <span>Soft costs ({softCostPercent}%)</span>
+          <span>{formatNumber(softCosts, currencySymbol)}</span>
+        </div>
+      )}
+
+      {contingencyPercent > 0 && (
+        <div class="summary-row">
+          <span>Contingency ({contingencyPercent}%)</span>
+          <span>{formatNumber(contingency, currencySymbol)}</span>
+        </div>
+      )}
+
+      <hr class="divider" />
+
+      <div class="summary-row summary-total">
+        <span>Total Development Cost</span>
+        <span>{formatNumber(totalDevelopmentCost, currencySymbol)}</span>
+      </div>
     </div>
   );
 }

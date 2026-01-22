@@ -1,6 +1,6 @@
 {
-  "name": "parking-demand-extension",
-  "description": "Parking demand calculation plug-in for Autodesk Forma",
+  "name": "forma-extension-cost-calculator",
+  "description": "Cost calculator extension for Autodesk Forma",
   "private": true,
   "version": "0.0.0",
   "type": "module",

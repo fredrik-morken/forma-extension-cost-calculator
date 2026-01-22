@@ -1,6 +1,6 @@
-/// <reference types="vite/client" />
+import "preact";
 
-declare global {
+declare module "preact" {
   namespace JSX {
     interface IntrinsicElements {
       "weave-input": any;

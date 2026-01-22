@@ -1,60 +1,142 @@
 body {
-    font: var(--12-regular);
-    margin: 0;
-    padding: 0 0;
+  font: var(--12-regular);
+  margin: 0;
+  padding: 0;
 }
+
 html {
-    box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .wrapper {
-    padding-top: 16px;
+  padding: 16px;
 }
 
 .header {
-    font: var(--12-bold);
-    margin-bottom: 16px;
+  font: var(--12-bold);
+  margin: 0 0 16px 0;
 }
 
-.setting-row {
-    align-items: center;
-    display: flex;
-    padding: 4px 0;
+/* Tab Bar */
+.tab-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
-.setting-row-function-color {
-    border-radius: 8px;
-    height: 8px;
-    margin-right: 12px;
-    width: 8px;
+.tab {
+  padding: 6px 12px;
+  font: var(--12-regular);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
 }
 
-.setting-row-function-name {
-    flex: 1;
+.tab-active {
+  background: var(--primary-surface);
+  font: var(--12-bold);
+  cursor: default;
 }
 
-.setting-row-function-name::before {
-    content: "";
-    background-color: --color;
-
+.tab-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
+/* Section Headers */
+.section-header {
+  font: var(--12-bold);
+  margin: 16px 0 8px 0;
+}
+
+/* Function Blocks */
+.function-block {
+  margin-bottom: 12px;
+}
+
+.function-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.function-color {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.function-name {
+  flex: 1;
+  font: var(--12-regular);
+}
+
+.function-area {
+  font: var(--12-regular);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.function-input {
+  padding-left: 18px;
+}
+
+.cost-input {
+  font-size: 12px;
+  width: 120px;
+}
+
+/* Divider */
 .divider {
-    border: 0;
-    background: var(--divider-lightweight);
-    height: 1px;
-    margin-bottom: 16px;
+  border: 0;
+  background: var(--divider-lightweight);
+  height: 1px;
+  margin: 16px 0;
 }
 
-.stats-row {
-    margin-bottom: 16px;
-    display: flex;
-    justify-content: space-between;
+/* Advanced Settings */
+.advanced-header {
+  font: var(--12-regular);
+  cursor: pointer;
+  user-select: none;
+  margin: 8px 0;
 }
 
+.advanced-header:hover {
+  opacity: 0.8;
+}
 
-.sqm-input {
-    font-size: 12px;
-    margin: 2px 10px;
-    width: 60px;
+.advanced-content {
+  margin: 12px 0;
+}
+
+.advanced-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.advanced-row label {
+  font: var(--12-regular);
+  flex: 1;
+}
+
+.advanced-row weave-input {
+  width: 180px;
+}
+
+/* Summary */
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font: var(--12-regular);
+}
+
+.summary-total {
+  font: var(--12-bold);
+  padding: 8px 0 0 0;
 }
