@@ -90,6 +90,12 @@ function RightPanel() {
 
   const [imperialUnits, setImperialUnits] = useState<boolean>(false);
 
+  // Selection state
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [selectionGfaPerFunction, setSelectionGfaPerFunction] = useState<
+    FunctionBreakdownMetric[]
+  >([]);
+
   const [costPerSqmPerFunction, setCostPerSqmPerFunction] = useState<
     Record<string, number>
   >({});
@@ -125,6 +131,44 @@ function RightPanel() {
     if (stored.revenuePerSqmPerFunction)
       setRevenuePerSqmPerFunction(stored.revenuePerSqmPerFunction);
   }, []);
+
+  // Subscribe to Forma selection changes
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined;
+
+    Forma.selection.subscribe(({ paths }) => {
+      setSelectedPaths(paths);
+    }).then((subscription) => {
+      unsubscribe = subscription.unsubscribe;
+    });
+
+    // Get initial selection
+    Forma.selection.getSelection().then((paths) => {
+      setSelectedPaths(paths);
+    });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  // Calculate metrics for selected elements
+  useEffect(() => {
+    if (selectedPaths.length === 0) {
+      setSelectionGfaPerFunction([]);
+      return;
+    }
+
+    Forma.areaMetrics.calculate({ paths: selectedPaths }).then((metrics) => {
+      const functionBreakdownMetrics =
+        metrics.builtInMetrics.grossFloorArea.functionBreakdown.filter(
+          (func) => func.functionId !== "unspecified",
+        );
+      setSelectionGfaPerFunction(functionBreakdownMetrics);
+    });
+  }, [selectedPaths]);
 
   // Poll area metrics from Forma
   useEffect(() => {
@@ -207,10 +251,20 @@ function RightPanel() {
     };
   }
 
+  // Derived state for selection mode
+  const isSelectionMode = selectedPaths.length > 0;
+  const activeGfaPerFunction = useMemo(() => {
+    if (isSelectionMode && selectionGfaPerFunction.length > 0) {
+      return selectionGfaPerFunction;
+    }
+    return gfaPerFunction;
+  }, [isSelectionMode, selectionGfaPerFunction, gfaPerFunction]);
+  const hasSelectionWithNoMetrics = isSelectionMode && selectionGfaPerFunction.length === 0;
+
   // Calculate costs
   const costPerFunction: Record<string, number> = useMemo(() => {
     const costs: Record<string, number> = {};
-    gfaPerFunction.forEach((metric) => {
+    activeGfaPerFunction.forEach((metric) => {
       if (metric.value === "UNABLE_TO_CALCULATE") {
         costs[metric.functionId] = 0;
       } else {
@@ -219,12 +273,16 @@ function RightPanel() {
       }
     });
     return costs;
-  }, [gfaPerFunction, costPerSqmPerFunction]);
+  }, [activeGfaPerFunction, costPerSqmPerFunction]);
 
   const hardCostSubtotal = useMemo(() => {
     const functionCosts = Object.values(costPerFunction).reduce((acc, curr) => acc + curr, 0);
+    // In selection mode, exclude fixed costs (land, earthwork)
+    if (isSelectionMode) {
+      return functionCosts;
+    }
     return functionCosts + landCost + earthworkCost;
-  }, [costPerFunction, landCost, earthworkCost]);
+  }, [costPerFunction, landCost, earthworkCost, isSelectionMode]);
 
   const softCosts = hardCostSubtotal * (softCostPercent / 100);
   const contingency = hardCostSubtotal * (contingencyPercent / 100);
@@ -233,7 +291,7 @@ function RightPanel() {
   // Calculate revenue
   const revenuePerFunction: Record<string, number> = useMemo(() => {
     const revenue: Record<string, number> = {};
-    gfaPerFunction.forEach((metric) => {
+    activeGfaPerFunction.forEach((metric) => {
       if (metric.value === "UNABLE_TO_CALCULATE") {
         revenue[metric.functionId] = 0;
       } else {
@@ -242,7 +300,7 @@ function RightPanel() {
       }
     });
     return revenue;
-  }, [gfaPerFunction, revenuePerSqmPerFunction]);
+  }, [activeGfaPerFunction, revenuePerSqmPerFunction]);
 
   const totalRevenue = useMemo(() => {
     return Object.values(revenuePerFunction).reduce((acc, curr) => acc + curr, 0);
@@ -400,12 +458,23 @@ function RightPanel() {
       <hr class="divider" />
 
       {/* Summary - Always visible, consolidated */}
-      <p class="section-header">Summary</p>
+      <p class="section-header">
+        Summary
+        <span class={isSelectionMode ? "selection-badge" : "global-badge"}>
+          {isSelectionMode ? "Selection" : "All"}
+        </span>
+      </p>
 
-      <div class="summary-row">
-        <span>Hard cost</span>
-        <span>{formatNumber(hardCostSubtotal, currencySymbol)}</span>
-      </div>
+      {hasSelectionWithNoMetrics ? (
+        <div class="no-metrics-message">
+          No area metrics for selected elements.
+        </div>
+      ) : (
+        <>
+          <div class="summary-row">
+            <span>Hard cost</span>
+            <span>{formatNumber(hardCostSubtotal, currencySymbol)}</span>
+          </div>
 
       {softCostPercent > 0 && (
         <div class="summary-row">
@@ -438,10 +507,12 @@ function RightPanel() {
         <span>{formatNumber(totalRevenue - totalDevelopmentCost, currencySymbol)}</span>
       </div>
 
-      <div class="summary-row summary-total">
-        <span>ROI</span>
-        <span>{roiPercent.toFixed(1)}%</span>
-      </div>
+          <div class="summary-row summary-total">
+            <span>ROI</span>
+            <span>{roiPercent.toFixed(1)}%</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
