@@ -7,5 +7,5 @@ export default defineConfig({
   server: {
     port: 8081,
   },
-  base: "/forma-extension-parking-demand-calculator/",
+  base: "/forma-extension-cost-calculator/",
 });
